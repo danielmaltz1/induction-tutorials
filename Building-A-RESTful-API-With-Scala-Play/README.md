@@ -10,7 +10,7 @@ This tutorial walks you through the creation of an API that can store, retrieve 
 * Test-driven development
 * git and GitHub
 * SBT
-* Mockito
+* Mockito/MockFactory
 * CURL
 
 ## Previous Knowledge
@@ -40,19 +40,17 @@ Behind Play, [Reactive Mongo](http://reactivemongo.org) will give us non-blockin
 
 The Reactive Mongo API exposes most normal data access functions you’d come to expect, but returns results as Scala Futures, and provides translation utilities for translating the Mongo document format (BSON) to JSON, and many functional helper methods for dealing with result sets.
 
-For this tutorial, we'll be using [the HMRC simple-reactivemongo](https://github.com/hmrc/simple-reactivemongo) library.
+For this tutorial, we'll be using [the HMRC mongo](https://github.com/hmrc/hmrc-mongo) library.
 
 ## SBT
 [SBT](https://www.scala-sbt.org/0.13/docs/Getting-Started.html) (Simple Build Tool) supports the compilation of Scala code and integration with other frameworks we're using. It is similar to Maven which you may be familiar with. 
 
 ## Unit Testing
-To wrap it all up, we’ll be using Scala Test and Mockito to unit test our application. Scala Test allows us to write test cases in the style of behaviour-driven development and highlights the flexibility of Scala and how it an easily be used to create a domain-specific language.
+To wrap it all up, we’ll be using Scala Test and MockFactory to unit test our application. Scala Test allows us to write test cases in the style of behaviour-driven development and highlights the flexibility of Scala and how it an easily be used to create a domain-specific language.
 
 ## Sections
 * [Part 1](Part1.md) 
 * [Part 2](Part2.md) 
 * [Part 3](Part3.md) 
-
-## Help
-* Demo project [here](https://mh-play-scala-api.herokuapp.com/) you can test/compare yours against
-* Source code [here](https://github.com/miranda-hawkes/play-scala-seed)
+* [Part 4](Part4.md)
+* [Part 5](Part5.md)

@@ -1,186 +1,126 @@
 # Part Three - Testing
-Working on Scala & Play Framework microservices you'll find yourself needing mocks and stubs a great deal for unit testing.
-This section aims to introduce you to the flexibility of the Mockito mocking framework.
+This section will show you how to layout your `ApplicationControllerSpec`, 
+we will be calling the database directly instead of mocking it. This process is a form of integration testing 
+as we will be testing the program from start to result. More specific unit testing will be done later using Mocks,
+but for now lets see if our controller and repository are working.
 
-## Mocking With Mockito
+## Building the application
 
-Go back to your `ApplicationControllerSpec`. There should be an error, as our controller now has two extra injected dependencies it didn't have before.
+Go back to your `ApplicationControllerSpec`. Make it extend `BaseSpecWithApplication`, go ahead and navigate to this trait to find
 
-We need to add another library dependency to help with unit testing our controller. Add the following library dependency with the rest:
 ```scala
-"org.mockito" % "mockito-core" % "2.28.2" % Test
+trait BaseSpec extends AnyWordSpec with Matchers
+
+trait BaseSpecWithApplication extends BaseSpec with GuiceOneServerPerSuite with ScalaFutures with BeforeAndAfterEach with BeforeAndAfterAll with Eventually {
+
+  implicit val mat: Materializer = app.materializer
+  implicit val executionContext: ExecutionContext = app.injector.instanceOf[ExecutionContext]
+
+  lazy val component: MessagesControllerComponents = injector.instanceOf[MessagesControllerComponents]
+  lazy val repository: BookRepository = injector.instanceOf[DataRepository]
+
+  implicit val messagesApi = app.injector.instanceOf[MessagesApi]
+  lazy val injector: Injector = app.injector
+
+  override def fakeApplication(): Application =
+    new GuiceApplicationBuilder()
+      .configure(Map(
+        "mongodb.uri"                                    -> "mongodb://localhost:27017/gradProject"
+      ))
+      .build()
+
+  lazy val fakeRequest: FakeRequest[AnyContentAsEmpty.type] =
+    FakeRequest("", "").withCSRFToken.asInstanceOf[FakeRequest[AnyContentAsEmpty.type]]
+  implicit val messages: Messages = messagesApi.preferred(fakeRequest)
+
+  def buildPost(url: String): FakeRequest[AnyContentAsEmpty.type] =
+    FakeRequest(POST, url).withCSRFToken.asInstanceOf[FakeRequest[AnyContentAsEmpty.type]]
+
+  def buildGet(url: String): FakeRequest[AnyContentAsEmpty.type] =
+    FakeRequest(GET, url).withCSRFToken.asInstanceOf[FakeRequest[AnyContentAsEmpty.type]]
+}
 ```
+This is something that is **not** provided by Play, and it just an example to help get you started. Let's break it down:
+* All the traits in the extensions come from the `libraryDependencies` in our `build.sbt`
+* The implicit vals aren't important right now, but know they are needed in other areas (Hint: To see where they are used try commenting one out)
+* `component` and `repository` are created instances of the controller components and data repository, note that new instances will be made for each suite ran
+* `fakeRequest` and `fakeApplication` use Guice to help construct an instance of the application being called
+* Similarly, `buildPost` and `buildGet` are methods we can use in the tests to pass fake requests to the controller
 
-In `ApplicationControllerSpec`, extend it with `MockitoSugar`. See if you can figure out what import you need.
-
-Then, add the following below the creation of `controllerComponents`:
-
+Inside `ApplicationControllerSpec`, create an instance of the controller above all tests:
 ```scala
-implicit val executionContext: ExecutionContext = app.injector.instanceOf[ExecutionContext]
-val mockDataRepository: DataRepository = mock[DataRepository]
+val TestApplicationController = new ApplicationController(
+    repository,
+    component
+  )
 ```
+Now we should be able to call all the methods in the controller
 
-We've created an `ExecutionContext` class in the same way as the `ControllerComponents`, but our `DataRepository` is different.
+### Testing the .create function
+* Add the following to your test, just **below** where you create the `TestApplicationController`.
 
-### Why?
-* We explicitly call methods on the `DataRepository` class in the controller and these methods can return **different** responses based off what you call it with
-* We **don't** want to test our `DataRepository` functionality as part of this spec, we only care about the `ApplicationController`
-
-The solution to these problems is a concept known as mocking, where you **explicitly** tell the methods in `DataRepository` what to return, so that you can test how your controller responds independently.
-
-**Fix the error in the test spec, by passing these new values into the test controller as parameters.**
-
-### Mocking the find() function in the DataRepository
-
-Try running the tests. You should get a `java.lang.NullPointerException`.
-This is because, although we've now created a `mock[DataRepository]`, we haven't told it what to do yet.
-
-Add these imports:
-```scala
-import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito._
-```
-
-Add the following to your test, just **above** where you create the `val result = ...`.
-
-```scala
-val dataModel: DataModel = DataModel(
-    "abcd",
-    "test name",
-    "test description",
-    100
-)
-  
-when(mockDataRepository.find(any())(any()))
-  .thenReturn(Future(List(dataModel)))
-``` 
-* We've created a simple test `DataModel` to use later
-* The `when` keyword is a Mockito function used for stubbing methods. Inside of this, you'll see the `mockDataRepository.find` method passed in - this is the `DataRepository` method that is used in our controller that needs to be stubbed.
-* The signature of the `find()` method in the library we're using is like so:
-    ```
-    def find(query: (String, JsValueWrapper)*)(implicit ec: ExecutionContext): Future[List[A]]
-    ```
-    * It can take **two** parameters - a *mongo query* and an *execution context*
-    * It returns a `Future[List[A]]` - `A` is the **same data type** as what your repository stores, in this case `DataModel` 
-* `any()` is a type of argument matcher used for defining the parameters of a stubbed method. There are many other more specific argument matches, for example `anyString()`, `anyBoolean()` etc.
-* All of this equates to: 
-    1. *when the `.find()` function is called*
-    2. *eventually (in a Future)*
-    3. *return the `dataModel` I created as the single entry in a `List` object*
-
-Now run the tests again and they should pass.
-
-### Mocking the create() function
-
-To test this function, we need to supply a body in the request, detailing what we want to add to Mongo.
-Update your .create test:
-
-```scala
-  "ApplicationController .create" when {
+    ```scala
+    private val dataModel: DataModel = DataModel(
+        "abcd",
+        "test name",
+        "test description",
+        100
+    )
+    ``` 
+* We've created a simple test `DataModel` to use later. For example, add and complete the following test 
+    ```scala
+    "ApplicationController .create" should {
     
-    "the json body is valid" should {
-      
-      val jsonBody: JsObject = Json.obj(
-        "_id" -> "abcd",
-        "name" -> "test name",
-        "description" -> "test description",
-        "numSales" -> 100
-      )
-
-      val writeResult: WriteResult = LastError(ok = true, None, None, None, 0, None, updatedExisting = false, None, None, wtimeout = false, None, None)
-
-      when(mockDataRepository.create(any()))
-        .thenReturn(Future(writeResult))
-
-      val result = TestApplicationController.create()(FakeRequest().withBody(jsonBody))
-
-      "return ???" in {
-        status(result) shouldBe ???
+      "create a book in the database" in {
+    
+        val request: FakeRequest[JsValue] = buildPost("/api").withBody[JsValue](Json.toJson(dataModel))
+        val createdResult: Future[Result] = TestApplicationController.create(request)
+    
+        status(createdResult) shouldBe Status.???
       }
     }
-  }
-```
-
-* A valid JSON body is created, matching fields required in a `DataModel`
-* A `WriteResult` is created - this is the data type returned by the `DataRepository.create()` function. The one created here shows the addition to mongo was a success. Don't worry about the many parameters!
-* `DataRepository.create()` is mocked - it returns a Future with the write result created earlier
-* `.withBody(jsonBody)` passes the JSON that was created to the body of the `FakeRequest`
+    ```
+* Running this test with an empty database works fine, but once the result is created the database is never emptied.
+  Likewise, run this test with an existing `dataModel` example, and we'll get a conflict where the value already exists.
+* This is why mocking is useful, we could test the Controller exclusive to the database's current state, but we'll come to that later.
+* For now add these lines to the bottom of the test class. They will delete the contents of the repository before and after each test.
+    ```scala
+      override def beforeEach(): Unit = repository.deleteAll()
+      override def afterEach(): Unit = repository.deleteAll()
+    ```
+  
+### Testing the .read function
+* Testing the `.read` function in the controller should be a similar process, 
+  except we will need to use `.create` in order to find something in our repository. 
+  Add and complete the missing implementation from the test below
+    ```scala
+    "ApplicationController .read" should {
+    
+      "find a book in the database by id" in {
+    
+        val request: FakeRequest[JsValue] = buildPost("/api").withBody[JsValue](dataModel)
+        val createdResult: Future[Result] = TestApplicationController.create(request)
+    
+        //Hint: You could use status(createdResult) shouldBe Status.CREATED to check this has worked again
+    
+        val readResult: Future[Result] = TestApplicationController.read("abcd")(FakeRequest())
+    
+        status(readResult) shouldBe ???
+        contentAsJson(readResult).as[???] shouldBe ???
+      }
+    }
+    ```
+We have created a happy path case for two of the controller methods, 
+go ahead and make the rest in this class following the same approach.
 
 #### Tasks
-1. Update the test assertion with the correct HTTP status we expect to be returned
+1. We have created a happy path case for two of the controller methods,
+   go ahead and make tests for the other controller methods following the same approach.
 
-2. Create a test scenario for the `create()` function where the supplied JSON is **not** valid. Put it inside the `"ApplicationController .create" when {` brackets.
-    Do you need the mocking here?
+2. Make a BadRequest for each controller method and test for these. It might seem backwards, 
+   but your tests should pass for errors if you are expecting them.
 
-3. Create two test scenarios for the `.update()` function:
-    1. The supplied JSON is valid - we also want to check the body of the response contains the JSON you passed in. You can use:
-     ```scala
-     "return the correct JSON" in {
-         await(jsonBodyOf(result)) shouldBe jsonBody
-     }
-     ```
-     You will need the following created at the top of the test spec to use the `jsonBodyOf` function:
-     ```scala
-     implicit val system: ActorSystem = ActorSystem("Sys")
-     implicit val materializer: ActorMaterializer = ActorMaterializer()
-     ``` 
-    2. The supplied JSON is invalid
-    
-4. Update the test for `index()` to check the body of the result    
-
-5. Create a test scenario for the `delete()` and `read()` functions
-
-## Catering for failed Mongo queries
-
-One thing we haven't catered for is if the Mongo query fails. This could be due to a number of reasons.
-
-Add a scenario to the `ApplicationController .create` test:
-
-```scala
-"the mongo data creation failed" should {
-
-  val jsonBody: JsObject = Json.obj(
-    "_id" -> "abcd",
-    "name" -> "test name",
-    "description" -> "test description",
-    "numSales" -> 100
-  )
-
-  when(mockDataRepository.create(any()))
-    .thenReturn(Future.failed(GenericDriverException("Error")))
-
-  "return an error" in {
-
-    val result = TestApplicationController.create()(FakeRequest().withBody(jsonBody))
-
-    status(result) shouldBe Status.INTERNAL_SERVER_ERROR
-    await(bodyOf(result)) shouldBe Json.obj("message" -> "Error adding item to Mongo").toString()
-  }
-}
-```
-
-Some key differences:
-* We stub a `Future.failed(GenericDriverException("Error"))` - a type of exception reactive mongo may throw if the query failed
-* We expect an INTERNAL_SERVER_ERROR
-* The JSON returned should have a suitable error message
-
-1. Run the tests - this scenario should fail.
-
-2. Update the controller method to catch any generic `ReactiveMongoException` using a `recover` block.
-
-```scala
-dataRepository.create(dataModel).map(_ => Created) recover {
-  case _: ReactiveMongoException => InternalServerError(Json.obj(
-    "message" -> "Error adding item to Mongo"
-  ))
-}
-```
-
-3. Run the tests again and they should pass
-
-4. Implement the same `recover` block for the other methods and create tests for these.
-     
-## Manually Testing your API
+## Manually Testing your API 
 
 What if you want to see your API in action adding data to Mongo?
 
@@ -195,15 +135,15 @@ curl "localhost:9000/api" -i
 ```
 
 You should see something like the following:
-``` 
+```  
 HTTP/1.1 200 OK
 Referrer-Policy: origin-when-cross-origin, strict-origin-when-cross-origin
 X-Frame-Options: DENY
 X-XSS-Protection: 1; mode=block
 X-Content-Type-Options: nosniff
-Content-Security-Policy: default-src 'self'
+Content-Security-Policy: default-src 'self' https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css
 X-Permitted-Cross-Domain-Policies: master-only
-Date: Sun, 05 Apr 2020 11:51:03 GMT
+Date: Mon, 23 May 2022 14:08:53 GMT
 Content-Type: application/json
 Content-Length: 2
 
@@ -221,7 +161,7 @@ curl -H "Content-Type: application/json" -d '{ "_id" : "1", "name" : "testName",
 ```
 * `-H "Content-Type: application/json"` sets a header so we can pass JSON into the body
 * `-d '{ "_id" : "1", "name" : "testName", "description" : "testDescription", "numSales" : 1 }'` defines the JSON body
- 
+
 You should get the following response:
 ``` 
 HTTP/1.1 201 Created
@@ -229,35 +169,28 @@ Referrer-Policy: origin-when-cross-origin, strict-origin-when-cross-origin
 X-Frame-Options: DENY
 X-XSS-Protection: 1; mode=block
 X-Content-Type-Options: nosniff
-Content-Security-Policy: default-src 'self'
+Content-Security-Policy: default-src 'self' https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css
 X-Permitted-Cross-Domain-Policies: master-only
-Date: Sun, 05 Apr 2020 12:22:04 GMT
+Date: Mon, 23 May 2022 14:12:38 GMT
 Content-Length: 0
 ```
 
 Try running that same command again. You should get the following:
 ```
 HTTP/1.1 500 Internal Server Error
-Referrer-Policy: origin-when-cross-origin, strict-origin-when-cross-origin
-X-Frame-Options: DENY
-X-XSS-Protection: 1; mode=block
-X-Content-Type-Options: nosniff
-Content-Security-Policy: default-src 'self'
-X-Permitted-Cross-Domain-Policies: master-only
-Date: Sun, 05 Apr 2020 12:22:56 GMT
-Content-Type: application/json
-Content-Length: 40
-
-[{"message": "Error adding item to Mongo"}]
+Date: Mon, 23 May 2022 14:23:05 GMT
+Content-Type: text/html; charset=UTF-8
+Content-Length: 16040
+...
 ```
 
 This is because you've tried to add a document to mongo with the same `_id`.
-A DatabaseException was thrown and it was caught in the controller by the code you added.
+A DatabaseException was thrown. This needs to be caught with error handling.
 
 ### Viewing your database
 There are a few ways you can view your newly created data in Mongo. One way is to download an app that provides a useful UI.
 
-1. Download and install [MongoDB Compass](https://www.mongodb.com/products/compass)
+1. Download and install [Robo 3T](https://robomongo.org/)
 
 2. Once installed, open the app and you should be able to connect with the default settings.
 
@@ -279,16 +212,7 @@ There are a few ways you can view your newly created data in Mongo. One way is t
 
 5. Hit the `DELETE /api/:id` route with a CURL command to delete a specific item. How can you specify the DELETE HTTP method?
 
-## Conclusion
+Now that we have a basic repository, we need to populate it. 
+Instead of entering all this information yourself, lets use steal from an existing database!
 
-Excellent, you've now created a RESTful API with CRUD functions, unit tested it with Mockito and learnt some useful CURL commands.
-
-1. When you're happy your API is working, do another commit and push it up to GitHub.
-
-2. Create a new Pull Request on GitHub, and get a colleague to review your work. Once they're happy, feel free to merge it into your master branch
-    
-    **Important** - only merge your own pull requests if its your own repo, like this one. For everything else, a member of your team should review and merge the branch into master.
-    
-## Help
-* Demo project [here](https://mh-play-scala-api.herokuapp.com/) you can test/compare yours against
-* Source code [here](https://github.com/miranda-hawkes/play-scala-seed)    
+## [Part 4](Part4.md)

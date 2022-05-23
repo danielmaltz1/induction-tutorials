@@ -8,6 +8,7 @@ In this section we'll give our API the ability to create, read, update and delet
 2. Extend the `ApplicationController` with `BaseController`. This will give us access to a number of functions for our actions
     * You'll notice there is now an error stating that ControllerComponents must be implemented - this is a dependency of the BaseController trait. This class contains values necessary in most frontend controllers, such as multi-language support. To remedy this, change the class signature to the following:
         ```scala
+        @Singleton
         class ApplicationController @Inject()(val controllerComponents: ControllerComponents) extends BaseController
         ```
     * We won't go much into dependency injection (DI) as part of this, but using DI you inject the objects needed by a class typically through a constructor
@@ -47,19 +48,19 @@ For almost every file in the `app/` directory of our project, there should be a 
 1. Create a new Scala file to hold tests for your new controller. Where should it sit and what should it be called?
 
 2. Extend the new file with:
-    * `UnitSpec` (import `uk.gov.hmrc.play.test.UnitSpec`) - this contains many test helpers for writing BDD, doing assertions etc
-    * `GuiceOneAppPerSuite` (import `org.scalatestplus.play.guice.GuiceOneAppPerSuite`) - provides an instance of Application in order to test various components in your app)
-
+    * `BaseSpecWithApplication` (import `baseSpec.BaseSpecWithApplication`) - this contains many test helpers for writing BDD, doing assertions etc. Note this isn't by default in Play, I've added this to construct Mongo easier
+    
 3. At the top of the spec, within the curly brackets, add the following lines:
     ```scala
-    val controllerComponents: ControllerComponents = app.injector.instanceOf[ControllerComponents]
-    
-    object TestApplicationController extends ApplicationController(
-        controllerComponents
+    val TestApplicationController = new ApplicationController(
+        component,
+        repository
     )
+   
     ```
-    * The first line creates an instance of the class we mentioned above that is injected into the ApplicationController. It is passed into the BaseController by the code we wrote earlier.
-    * The next few lines create a test version of your controller that you can reuse for testing and call your new Action methods on.
+    * This creates a test version of your controller that you can reuse for testing and call your new Action methods on.
+    * Note `component` and `repository` come from the BaseSpecWithApplication, they are created as instances of controller components and Mongo repositories and are injected into the Controller.
+
 
 For each controller action, we want a separate suite of tests. One way to structure the tests is the following:
 
@@ -130,14 +131,18 @@ Before we can build our controller actions, we'll add a data access layer and de
 To design how our data should look, we can use what are known as 'models' in the Scala world. Models are similar to classes and create data structures based off the parameters you pass in. These parameters are immutable (can't be changed).
 A simple model:
    ```scala
-   case class Book(name: String
-                   author: String,
-                   numSales: Int)
+   case class DataModel(_id: String
+                        name: String,
+                        description: String,
+                        numSales: Int)
    ```
 To create a new instance of that model, you can do either of the following:
    ```scala
-   val bookOne = Book("Book name", "Author name", 10)
-   val bookTwo = Book(name = "Book name", author = "Author name", numSales = 10)
+   val bookOne = DataModel("id1", "Book name", "Author name", 10)
+   ```
+Or
+   ```scala
+   val bookOne = DataModel(_id = "id1", name = "Book name", description = "Author name", numSales = 10)
    ```
 
 1. Create a new folder in your project called `models` inside the `app` directory
@@ -168,74 +173,132 @@ Next we will define the contract for our data access layer. Traits are similar t
 
 2. In that directory, create a new Scala file named `DataRepository.scala` with the following content:
     ```scala
-    import javax.inject.{Inject, Singleton}
+    package repositories
+
     import models.DataModel
-    import play.api.libs.json.{JsObject, Json}
-    import play.modules.reactivemongo.ReactiveMongoComponent
-    import reactivemongo.api.commands.WriteResult
-    import reactivemongo.bson.BSONObjectID
-    import uk.gov.hmrc.mongo.ReactiveRepository
+    import org.mongodb.scala.bson.conversions.Bson
+    import org.mongodb.scala.model.Filters.empty
+    import org.mongodb.scala.model._
+    import org.mongodb.scala.result
+    import uk.gov.hmrc.mongo.MongoComponent
+    import uk.gov.hmrc.mongo.play.json.PlayMongoRepository
+    
+    import javax.inject.{Inject, Singleton}
     import scala.concurrent.{ExecutionContext, Future}
     
     @Singleton
-    class DataRepository @Inject()(mongo: ReactiveMongoComponent,
-                                   implicit val ec: ExecutionContext) extends ReactiveRepository[DataModel, BSONObjectID](
-        "data",
-        mongo.mongoConnector.db,
-        DataModel.formats
+    class DataRepository @Inject()(
+      mongoComponent: MongoComponent
+    )(implicit ec: ExecutionContext) extends PlayMongoRepository[DataModel](
+      collectionName = "dataModels",
+      mongoComponent = mongoComponent,
+      domainFormat = DataModel.formats,
+      indexes = Seq(IndexModel(
+        Indexes.ascending("_id")
+      )),
+      replaceIndexes = false
     ) {
     
-      def create(data: DataModel): Future[WriteResult] = insert(data)
+      def create(book: DataModel): Future[DataModel] = 
+        collection
+          .insertOne(book)
+          .toFuture()
+          .map(_ => book)
     
-      def read(id: String): Future[DataModel] = find("_id" -> id) map (_.head)
+      private def byID(id: String): Bson =
+        Filters.and(
+          Filters.equal("_id", id)
+        )
     
-      def update(data: DataModel): Future[DataModel] = findAndUpdate(
-        Json.obj("_id" -> data._id),
-        Json.toJson(data).as[JsObject]
-      ).map(_ => data)
+      def read(id: String): Future[DataModel] =
+        collection.find(byID(id)).headOption flatMap {
+          case Some(data) =>
+            Future(data)
+         } 
     
-      def delete(id: String): Future[WriteResult] = remove("_id" -> id)
+      def update(id: String, book: DataModel): Future[result.UpdateResult] = 
+        collection.replaceOne(
+          filter = byID(id),
+          replacement = book,
+          options = new ReplaceOptions().upsert(true) //What happens when we set this to false?
+        ).toFuture()
+    
+      def delete(id: String): Future[result.DeleteResult] =
+        collection.deleteOne(
+        filter = byID(id)
+       ).toFuture()
+    
+      def deleteAll(): Future[Unit] = collection.deleteMany(empty()).toFuture().map(_ => ()) //Hint: needed for tests
+    
     }
+
     ```
 There's a lot going on so let's try to break it down:
 
 ```scala
 @Singleton
-class DataRepository @Inject()(mongo: ReactiveMongoComponent,
-                              implicit val ec: ExecutionContext) extends ReactiveRepository[DataModel, BSONObjectID]
+class DataRepository @Inject()(
+                                mongoComponent: MongoComponent
+                              )(implicit ec: ExecutionContext) extends PlayMongoRepository[DataModel]
 ```
-* This section creates a new DataRepository class and injects dependencies into it required for every Mongo Repository. `extends ReactiveRepository[DataModel, BSONObjectID]` tells the library what the structure of our data looks like by using our newly created `DataModel`.
-This means that every document inserted into the database has the same structure, with `id`, `name`, `description` and `numSales` properties.
-For this database structure, each document will be identified by the `id`.
+* This section creates a new DataRepository class and injects dependencies into it required for every Mongo Repository. `extends PlayMongoRepository[DataModel]` tells the library what the structure of our data looks like by using our newly created `DataModel`.
+This means that every document inserted into the database has the same structure, with `_id`, `name`, `description` and `numSales` properties.
+For this database structure, each document will be identified by the `_id`.
 
 ```scala
-"data",
-mongo.mongoConnector.db,
-DataModel.formats
+collectionName = "dataModels",
+mongoComponent = mongoComponent,
+domainFormat = DataModel.formats,
+indexes = Seq(IndexModel(
+  Indexes.ascending("_id")
+)),
+replaceIndexes = false
 ```
 
-* These lines pass in required parameters to the ReactiveRepository abstract class.
-    * `"data"` is the name of the collection (you can set this to whatever you like).
-    * `mongo.mongoConnector.db` is supplied by the reactive mongo plugin, meaning you don't need to mess around with the Mongo connection configuration
+* These lines pass in required parameters to the PlayMongoRepository abstract class.
+    * `"dataModels"` is the name of the collection (you can set this to whatever you like).
     * `DataModel.formats` uses the `implicit val formats` we created earlier. It tells the driver how to read and write between a `DataModel` and `JSON` (the format that data is stored in Mongo)
+    * `indexes` is shows the structure of the data stored in Mongo, notice we can ensure the bookId to be unique
 
 ```scala
-  def create(data: DataModel): Future[WriteResult] = insert(data)
+  def create(book: DataModel): Future[DataModel] = 
+    collection
+      .insertOne(book)
+      .toFuture()
+      .map(_ => book)
 
-  def read(id: String): Future[DataModel] = find("_id" -> id) map (_.head)
+  private def byID(id: String): Bson =
+    Filters.and(
+      Filters.equal("bookId", id)
+    )
 
-  def update(data: DataModel): Future[DataModel] = findAndUpdate(
-    query = Json.obj("_id" -> data._id),
-    update = Json.toJson(data).as[JsObject]
-  ).map(_ => data)
+  def read(id: String): Future[DataModel] =
+    collection.find(byID(id)).headOption flatMap {
+      case Some(data) =>
+        Future(data)
+    } 
 
-  def delete(id: String): Future[WriteResult] = remove("_id" -> id)
+  def update(id: String, book: DataModel): Future[result.UpdateResult] = 
+    collection.replaceOne(
+      filter = byID(id),
+      replacement = book,
+      options = new ReplaceOptions().upsert(true) //What happens when we set this to false?
+    ).toFuture()
+
+  def delete(id: String): Future[result.DeleteResult] =
+    collection.deleteOne(
+      filter = byID(id)
+    ).toFuture()
+
+  def deleteAll(): Future[Unit] = collection.deleteMany(empty()).toFuture().map(_ => ()) //Hint: needed for tests
+
 ```
 * Each of these methods correspond to a CRUD function. 
   * `create()` adds a DataModel object to the database
   * `read()` retrieves a DataModel object from the database. It uses an `id` parameter to find the data its looking for
   * `update()` takes in a DataModel, finds a matching document with the same `id` and updates the document. It then returns the updated DataModel
   * `delete()` deletes a document in the database that matches the `id` passed in
+  * `delteAll()` is similar to delete, this removes all data from Mongo with the same collection name
 * All of the return types of these functions are [asynchronous futures](https://www.playframework.com/documentation/2.6.x/ScalaAsync).
 
 ## The Controller
@@ -251,13 +314,14 @@ There is an unimplemented `index()` method. This is meant to display a list of a
 
 Update `index()` to the following:
    ```scala
-   def index(): Action[AnyContent] = Action.async { implicit request =>
-       dataRepository.find().map(items => Ok(Json.toJson(items)))
-   }
+  def index(): Action[AnyContent] = Action.async { implicit request =>
+    val books: Future[Seq[DataModel]] = dataRepository.collection.find().toFuture()
+    books.map(items => Json.toJson(items)).map(result => Ok(result))
+  }
    ```
 * `.find()` is a built-in method in the library we're using, and will return all items in the `data` repository.
-* The result returned by this method is a `Future` - essentially a placeholder for the result of performing the lookup operation in the database. We use `map(items => Ok(Json.toJson(items))` to write what we want to do with the result.
-* In this case, we take the resulting object (of type `List[DataModel]`), transform it into JSON, and return it in the body of an `Ok` / 200 response
+* The result returned by this method is a `Future` - essentially a placeholder for the result of performing the lookup operation in the database. We use `.map(items => Json.toJson(items)).map(result => Ok(result))` to write what we want to do with the result.
+* In this case, we take the resulting object (of type `Seq[DataModel]`), transform it into JSON, and return it in the body of an `Ok` / 200 response
 
 ### Read and Delete Actions
 See if you can complete two more methods, using the appropriate methods created in `DataRepository` with the following prompts:
@@ -285,6 +349,9 @@ def create(): Action[JsValue] = Action.async(parse.json) { implicit request =>
 - This is a character used when you don't care what the value of that field is. For `JsError(_)`, if we wanted to we could pull out the reason(s) the validation failed and log them somewhere.
 - Have a look in the documentation for the `JsSuccess` and `JsError` case classes to see what other properties they have. Hint: start [here](https://www.playframework.com/documentation/2.6.x/api/scala/play/api/libs/json/index.html)
 
+**How would check something is created in the database?**
+- Think about what is returned form `.create()` and how you can match on this similar to validating the request body
+
 ### The Update Action
 See if you can apply what you've seen so far to the `update()` function and complete the code.
 * It should take in an `id` URL parameter, similar to `read()` and `delete()`
@@ -293,7 +360,3 @@ See if you can apply what you've seen so far to the `update()` function and comp
 * If successful, it should return HTTP ACCEPTED, with the **new** updated DataModel (in the form of JSON) in the body of the response
 
 ## [Part 3](Part3.md)
-
-## Help
-* Demo project [here](https://mh-play-scala-api.herokuapp.com/) you can test/compare yours against
-* Source code [here](https://github.com/miranda-hawkes/play-scala-seed)
