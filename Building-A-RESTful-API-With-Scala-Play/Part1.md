@@ -16,7 +16,7 @@ From the [Template](https://github.com/vinniebrice/play-template):
 
 2. Navigate in your terminal to an appropriate location on your computer
 
-3. Enter `git clone "THE_GITHUB_URL"`, e.g. `git clone git@github.com:vinniebrice/gradsProject.git`
+3. Enter `git clone "THE_GITHUB_URL"`, e.g. `git clone git@github.com:vinniebrice/play-template.git`
 
 4. From **IntelliJ**:
    * File → Open → find your project
@@ -44,7 +44,7 @@ We want to track changes to the project using git. Since we cloned this repo we 
    * We need to tell git where the remote GitHub repository is, so that we can push up changes. Run the following, substituting with your GitHub username and newly created project name
    * `git remote rename origin upstream` (The old origin is now renamed to upstream)
    * `git remote add origin git@github.com:<username>/<repo-name>.git` (A new origin is added, your github!)
-   * e.g. `git remote add origin git@github.com:vinniebrice/gradsProject.git`
+   * e.g. `git remote add origin git@github.com:vinniebrice/play-template.git`
 
 3. Run `git remote -v` to check the remote is correct
 
