@@ -21,7 +21,6 @@ From the [Template](https://github.com/vinniebrice/play-template):
 4. From **IntelliJ**:
    * File → Open → find your project
    * Check the project JDK is setup to Java 1.8
-   * Ensure library sources is ticked
    * Hit OK
 
 Take a few minutes to get familiar with what has been created for you. In particular:

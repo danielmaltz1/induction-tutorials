@@ -53,13 +53,12 @@ For almost every file in the `app/` directory of our project, there should be a 
 3. At the top of the spec, within the curly brackets, add the following lines:
     ```scala
     val TestApplicationController = new ApplicationController(
-        component,
-        repository
+        component
     )
    
     ```
     * This creates a test version of your controller that you can reuse for testing and call your new Action methods on.
-    * Note `component` and `repository` come from the BaseSpecWithApplication, they are created as instances of controller components and Mongo repositories and are injected into the Controller.
+    * Note `component` comes from the BaseSpecWithApplication, it is created as an instance of controller components and injected into the Controller.
 
 
 For each controller action, we want a separate suite of tests. One way to structure the tests is the following:
@@ -305,7 +304,7 @@ replaceIndexes = false
 At this point, we can return to the controller to round out the implementation details there. Before we can start adding implementation details, we need to configure some dependency injections.
 We will inject the DataRepository into our Controller, then use that to create our repository.
 
-1. Update the signature of `ApplicationController` so that `DataRepository` is injected as a dependency, as per previous examples
+1. Update the signature of `ApplicationController` so that `DataRepository` is injected as a dependency, as per previous examples. You will also need to update the tests to inject an instance of your repository, there should be a `repository` val in `BaseSpecWithApplication`
 
 2. Also inject `implicit val ec: ExecutionContext` as a dependency. ExecutionContext is needed in asynchronous code as it lets Scala decide where in the thread pool to execute the related function
 
