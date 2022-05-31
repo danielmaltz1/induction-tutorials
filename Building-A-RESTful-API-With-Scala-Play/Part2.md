@@ -302,7 +302,9 @@ replaceIndexes = false
 
 ## The Controller
 At this point, we can return to the controller to round out the implementation details there. Before we can start adding implementation details, we need to configure some dependency injections.
-We will inject the DataRepository into our Controller, then use that to create our repository.
+We will inject the DataRepository into our Controller, then use that to create our repository. 
+
+**IMPORTANT: From here on if you are testing the controller with an instance of the repository, ensure mongo is running in docker on port 27017**
 
 1. Update the signature of `ApplicationController` so that `DataRepository` is injected as a dependency, as per previous examples. You will also need to update the tests to inject an instance of your repository, there should be a `repository` val in `BaseSpecWithApplication`
 
@@ -356,6 +358,7 @@ See if you can apply what you've seen so far to the `update()` function and comp
 * It should take in an `id` URL parameter, similar to `read()` and `delete()`
 * It should also take in a JSON body
 * You need to validate the body in the same way as in the `create()` method
-* If successful, it should return HTTP ACCEPTED, with the **new** updated DataModel (in the form of JSON) in the body of the response
+* If the validation is successful, it should return HTTP ACCEPTED, with the **new** updated DataModel (in the form of JSON) in the body of the response. 
+  You can either simply return the body from the request or .read() for the id of the new body.
 
 ## [Part 3](Part3.md)
