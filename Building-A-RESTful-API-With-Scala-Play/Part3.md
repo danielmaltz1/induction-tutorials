@@ -74,7 +74,7 @@ Now we should be able to call all the methods in the controller
       "create a book in the database" in {
     
         val request: FakeRequest[JsValue] = buildPost("/api").withBody[JsValue](Json.toJson(dataModel))
-        val createdResult: Future[Result] = TestApplicationController.create(request)
+        val createdResult: Future[Result] = TestApplicationController.create()(request)
     
         status(createdResult) shouldBe Status.???
       }
@@ -99,7 +99,7 @@ Now we should be able to call all the methods in the controller
       "find a book in the database by id" in {
     
         val request: FakeRequest[JsValue] = buildPost("/api").withBody[JsValue](dataModel)
-        val createdResult: Future[Result] = TestApplicationController.create(request)
+        val createdResult: Future[Result] = TestApplicationController.create()(request)
     
         //Hint: You could use status(createdResult) shouldBe Status.CREATED to check this has worked again
     
