@@ -83,8 +83,16 @@ Now we should be able to call all the methods in the controller
 * Running this test with an empty database works fine, but once the result is created the database is never emptied.
   Likewise, run this test with an existing `dataModel` example, and we'll get a conflict where the value already exists.
 * This is why mocking is useful, we could test the Controller exclusive to the database's current state, but we'll come to that later.
-* For now add these lines to the bottom of the test class. They will delete the contents of the repository before and after each test.
+* For now add these lines to the bottom of the test class and call them at the top and bottom of each test. They will delete the contents of the repository before and after each test.
     ```scala
+    "test name" should {
+      "do something" in {
+         beforeEach 
+         ... 
+         afterEach
+      }
+    }
+  ...
       override def beforeEach(): Unit = repository.deleteAll()
       override def afterEach(): Unit = repository.deleteAll()
     ```
@@ -98,7 +106,7 @@ Now we should be able to call all the methods in the controller
     
       "find a book in the database by id" in {
     
-        val request: FakeRequest[JsValue] = buildPost("/api").withBody[JsValue](Json.toJson(dataModel))
+        val request: FakeRequest[JsValue] = buildGet("/api/${dataModel._id}").withBody[JsValue](Json.toJson(dataModel))
         val createdResult: Future[Result] = TestApplicationController.create()(request)
     
         //Hint: You could use status(createdResult) shouldBe Status.CREATED to check this has worked again
