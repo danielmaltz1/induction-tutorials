@@ -118,8 +118,6 @@ Now we should be able to call all the methods in the controller
       }
     }
     ```
-We have created a happy path case for two of the controller methods, 
-go ahead and make the rest in this class following the same approach.
 
 #### Tasks
 1. We have created a happy path case for two of the controller methods,
@@ -165,7 +163,7 @@ Content-Length: 2
 
 To populate the database with some data, run the following CURL command:
 ```
-curl -H "Content-Type: application/json" -d '{ "_id" : "1", "name" : "testName", "description" : "testDescription", "numSales" : 1 }' "localhost:9000/api" -i
+curl -H "Content-Type: application/json" -d '{ "_id" : "1", "name" : "testName", "description" : "testDescription", "numSales" : 1 }' "localhost:9000/api/create" -i
 ```
 * `-H "Content-Type: application/json"` sets a header so we can pass JSON into the body
 * `-d '{ "_id" : "1", "name" : "testName", "description" : "testDescription", "numSales" : 1 }'` defines the JSON body
