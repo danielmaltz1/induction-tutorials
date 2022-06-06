@@ -17,7 +17,7 @@ trait BaseSpecWithApplication extends BaseSpec with GuiceOneServerPerSuite with 
   implicit val executionContext: ExecutionContext = app.injector.instanceOf[ExecutionContext]
 
   lazy val component: MessagesControllerComponents = injector.instanceOf[MessagesControllerComponents]
-  lazy val repository: BookRepository = injector.instanceOf[DataRepository]
+  lazy val repository: DataRepository = injector.instanceOf[DataRepository]
 
   implicit val messagesApi = app.injector.instanceOf[MessagesApi]
   lazy val injector: Injector = app.injector

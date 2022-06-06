@@ -51,7 +51,7 @@ communicating down stream with other APIs/services. We will use connectors for t
    class LibraryService @Inject()(connector: LibraryConnector) {
 
       def getGoogleBook(urlOverrride: Option[String] = None, search: String, term: String)(implicit ec: ExecutionContext): Future[Book] =
-         connector.get[Book](urlOverrride.getOrElse(s"https://www.googleapis.com/books/v1/volumes?q=$search%$term"))
+         connector.get[DataModel](urlOverrride.getOrElse(s"https://www.googleapis.com/books/v1/volumes?q=$search%$term"))
 
    }
    ```
