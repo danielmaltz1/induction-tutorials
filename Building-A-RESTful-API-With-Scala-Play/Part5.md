@@ -44,7 +44,7 @@ we are going to use mocks to perform unit tests.
             .returning(Future(gameOfThrones.as[???]))
             .once()
     
-          whenReady(testService.getGoogleBook(urlOverrride = Some(url), search = "", term = "")) { result =>
+          whenReady(testService.getGoogleBook(urlOverride = Some(url), search = "", term = "")) { result =>
             result shouldBe ???
           }
         }
@@ -79,7 +79,7 @@ we are going to use mocks to perform unit tests.
             .returning(???)// How do we return an error?
             .once()
     
-          whenReady(testService.getGoogleBook(urlOverrride = Some(url), search = "", term = "")) { result =>
+          whenReady(testService.getGoogleBook(urlOverride = Some(url), search = "", term = "")) { result =>
             result shouldBe ???
           }
    }
