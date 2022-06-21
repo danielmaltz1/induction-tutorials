@@ -166,7 +166,12 @@ we are going to use mocks to perform unit tests.
 4. Add error handling to `DataRepository`, similar to how we did it to the connector. 
    Add tests for this to `ApplicationContorllerSpec`
 
-5. Try mocking Mongo for the controller.
+5. Try mocking Mongo for the controller. This will involve a few new steps:
+   * Create a `trait` in the repository class
+   * Have the repository extend the trait
+   * Add all the `defs` you want to mock to the `trait` as abstract methods
+   * Then in your test suite, have your `mockRepository` val mock the trait instead of the class
+   * This avoids having us to mock the `PlayMongoRepository` extension, our only concern is mocking the methods we made
 
 6. Use the html files in the `views` package to display at least one book from the Google Books API. Do this by
    * using the connector to retrieve the book by searching for the `isbn` in the url (you may have to change the structure of `dataModels`),
