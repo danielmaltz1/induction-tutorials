@@ -171,6 +171,7 @@ we are going to use mocks to perform unit tests.
    * Have the repository extend the trait
    * Add all the `defs` you want to mock to the `trait` as abstract methods
    * Then in your test suite, have your `mockRepository` val mock the trait instead of the class
+   * Note: You will have to inject the trait in all places where you injected the repository class, e.g. the service layer
    * This avoids having us to mock the `PlayMongoRepository` extension, our only concern is mocking the methods we made
 
 6. Use the html files in the `views` package to display at least one book from the Google Books API. Do this by
